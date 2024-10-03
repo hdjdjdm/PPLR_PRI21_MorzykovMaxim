@@ -2,7 +2,6 @@ package main
 
 import "fmt"
 
-// CalcInt выполняет арифметические операции с двумя целыми числами.
 func CalcInt(a, b int, op string) {
 	switch op {
 	case "+":
