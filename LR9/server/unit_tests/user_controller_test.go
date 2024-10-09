@@ -27,7 +27,7 @@ func TestMain(m *testing.M) {
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
 	client, err := mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Ошибка подключения к MongoDB:", err)
 	}
 
 	testDB = client.Database("test_db")
@@ -37,8 +37,7 @@ func TestMain(m *testing.M) {
 
 	objectID, err := primitive.ObjectIDFromHex(idStr)
 	if err != nil {
-		fmt.Println("Error:", err)
-		return
+		log.Fatalf("Ошибка создания ObjectID из строки: %v", err)
 	}
 	_, err = testDB.Collection("users").InsertOne(context.TODO(), controllers.User{
 		Id:   objectID,
@@ -46,12 +45,12 @@ func TestMain(m *testing.M) {
 		Age:  55,
 	})
 	if err != nil {
-		log.Fatalf("Error inserting test user: %v", err)
+		log.Fatalf("Ошибка вставки тестового пользователя: %v", err)
 	}
 	code := m.Run()
 
 	if err := client.Disconnect(context.TODO()); err != nil {
-		log.Fatal(err)
+		log.Fatal("Ошибка отключения от MongoDB:", err)
 	}
 
 	os.Exit(code)
@@ -60,11 +59,11 @@ func TestMain(m *testing.M) {
 func dropCollections(db *mongo.Database) {
 	collections, err := db.ListCollectionNames(context.TODO(), bson.M{})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Ошибка получения коллекций:", err)
 	}
 	for _, collection := range collections {
 		if err := db.Collection(collection).Drop(context.TODO()); err != nil {
-			log.Fatal(err)
+			log.Fatalf("Ошибка удаления коллекции %s: %v", collection, err)
 		}
 	}
 }
@@ -79,7 +78,7 @@ func TestCreateUser(t *testing.T) {
 		req, err := http.NewRequest("POST", "/users", bytes.NewBuffer(body))
 
 		if err != nil {
-			t.Fatal(err)
+			t.Fatal("Ошибка создания запроса:", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 
@@ -87,7 +86,7 @@ func TestCreateUser(t *testing.T) {
 		router.ServeHTTP(rr, req)
 
 		if status := rr.Code; status != http.StatusCreated {
-			t.Errorf("handler returned wrong status code: got %v want %v",
+			t.Errorf("Неверный код статуса: получен %v, ожидается %v",
 				status, http.StatusCreated)
 		}
 	}
@@ -99,25 +98,25 @@ func TestGetUsers(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/users?page=1&limit=10", nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("Ошибка создания запроса:", err)
 	}
 
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
 	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
+		t.Errorf("Неверный код статуса: получен %v, ожидается %v",
 			status, http.StatusOK)
 	}
 
 	var users []controllers.User
 	err = json.Unmarshal(rr.Body.Bytes(), &users)
 	if err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
+		t.Fatalf("Ошибка декодирования ответа: %v", err)
 	}
-	fmt.Println("LEN: ", len(users))
+	fmt.Println("Количество пользователей:", len(users))
 	if len(users) != len(testUsers) {
-		t.Errorf("expected %d users, got %d", len(testUsers), len(users))
+		t.Errorf("Ожидалось %d пользователей, получено %d", len(testUsers), len(users))
 	}
 }
 
@@ -130,7 +129,7 @@ func TestUpdateUser(t *testing.T) {
 
 	req, err := http.NewRequest("PUT", "/users/60b6c8f1f1e2b1c3d4e5f6a7", bytes.NewBuffer(body))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("Ошибка создания запроса:", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -138,7 +137,7 @@ func TestUpdateUser(t *testing.T) {
 	router.ServeHTTP(rr, req)
 
 	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
+		t.Errorf("Неверный код статуса: получен %v, ожидается %v",
 			status, http.StatusOK)
 	}
 }
@@ -149,14 +148,23 @@ func TestDeleteUser(t *testing.T) {
 
 	req, err := http.NewRequest("DELETE", "/users/60b6c8f1f1e2b1c3d4e5f6a7", nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("Ошибка создания запроса:", err)
 	}
 
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
-	if status := rr.Code; status != http.StatusNoContent {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusNoContent)
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("Неверный код статуса: получен %v, ожидается %v",
+			status, http.StatusOK)
+	}
+
+	expected := map[string]string{"message": "Пользователь успешно удален"}
+	var response map[string]string
+	json.Unmarshal(rr.Body.Bytes(), &response)
+
+	if response["message"] != expected["message"] {
+		t.Errorf("Неверное тело ответа: получено %v, ожидается %v",
+			response, expected)
 	}
 }

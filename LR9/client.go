@@ -7,16 +7,14 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-const baseURL = "http://localhost:8080/users"
+const apiBaseURL = "http://localhost:8080/users"
 
 type User struct {
-	Id   primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	Name string             `bson:"name" json:"name"`
-	Age  int                `bson:"age" json:"age"`
+	Id   string `json:"id,omitempty"`
+	Name string `json:"name"`
+	Age  int    `json:"age"`
 }
 
 func main() {
@@ -38,7 +36,7 @@ func main() {
 		case 1:
 			getAllUsers()
 		case 2:
-			getUserByID()
+			getUser()
 		case 3:
 			createUser()
 		case 4:
@@ -46,63 +44,37 @@ func main() {
 		case 5:
 			deleteUser()
 		case 6:
-			fmt.Println("Выход из программы...")
+			fmt.Println("Выход из программы.")
 			os.Exit(0)
 		default:
-			fmt.Println("Неверный выбор. Попробуйте еще раз.")
+			fmt.Println("Неверный выбор, попробуйте снова.")
 		}
 	}
 }
 
 func getAllUsers() {
-	resp, err := http.Get(baseURL)
+	resp, err := http.Get(apiBaseURL)
 	if err != nil {
-		fmt.Println("Ошибка при получении пользователей:", err)
+		fmt.Printf("Ошибка при получении пользователей: %v\n", err)
 		return
 	}
 	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Ошибка при чтении ответа:", err)
-		return
-	}
 
 	if resp.StatusCode == http.StatusOK {
 		var users []User
-		json.Unmarshal(body, &users)
+		body, _ := ioutil.ReadAll(resp.Body)
+		err := json.Unmarshal(body, &users)
+		if err != nil {
+			fmt.Printf("Ошибка при разборе данных: %v\n", err)
+			return
+		}
+
+		fmt.Println("Список пользователей:")
 		for _, user := range users {
-			fmt.Printf("ID: %s, Name: %s, Age: %d\n", user.Id.Hex(), user.Name, user.Age)
+			fmt.Printf("ID: %s, Имя: %s, Возраст: %d\n", user.Id, user.Name, user.Age)
 		}
 	} else {
-		fmt.Println("Ошибка:", string(body))
-	}
-}
-
-func getUserByID() {
-	fmt.Print("Введите ID пользователя: ")
-	var id string
-	fmt.Scan(&id)
-
-	resp, err := http.Get(baseURL + "/" + id)
-	if err != nil {
-		fmt.Println("Ошибка при получении пользователя:", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println("Ошибка при чтении ответа:", err)
-		return
-	}
-
-	if resp.StatusCode == http.StatusOK {
-		var user User
-		json.Unmarshal(body, &user)
-		fmt.Printf("ID: %s, Name: %s, Age: %d\n", user.Id.Hex(), user.Name, user.Age)
-	} else {
-		fmt.Println("Ошибка:", string(body))
+		fmt.Printf("Ошибка: %s\n", resp.Status)
 	}
 }
 
@@ -114,24 +86,44 @@ func createUser() {
 	fmt.Scan(&user.Age)
 
 	body, _ := json.Marshal(user)
-	resp, err := http.Post(baseURL, "application/json", bytes.NewBuffer(body))
+	resp, err := http.Post(apiBaseURL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
-		fmt.Println("Ошибка при создании пользователя:", err)
+		fmt.Printf("Ошибка при создании пользователя: %v\n", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusCreated {
 		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Println("Пользователь создан:", string(body))
+		fmt.Printf("Пользователь успешно создан: %s\n", body)
 	} else {
-		fmt.Println("Ошибка:", resp.Status)
+		fmt.Printf("Ошибка: %s\n", resp.Status)
+	}
+}
+
+func getUser() {
+	var id string
+	fmt.Print("Введите ID пользователя: ")
+	fmt.Scan(&id)
+
+	resp, err := http.Get(apiBaseURL + "/" + id)
+	if err != nil {
+		fmt.Printf("Ошибка при получении пользователя: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		fmt.Printf("Данные пользователя: %s\n", body)
+	} else {
+		fmt.Printf("Ошибка: %s\n", resp.Status)
 	}
 }
 
 func updateUser() {
 	var user User
-	fmt.Print("Введите ID пользователя для обновления: ")
+	fmt.Print("Введите ID пользователя: ")
 	fmt.Scan(&user.Id)
 	fmt.Print("Введите новое имя пользователя: ")
 	fmt.Scan(&user.Name)
@@ -139,49 +131,51 @@ func updateUser() {
 	fmt.Scan(&user.Age)
 
 	body, _ := json.Marshal(user)
-	req, err := http.NewRequest("PUT", baseURL+"/"+user.Id.Hex(), bytes.NewBuffer(body))
+	req, err := http.NewRequest("PUT", apiBaseURL+"/"+user.Id, bytes.NewBuffer(body))
 	if err != nil {
-		fmt.Println("Ошибка при обновлении пользователя:", err)
+		fmt.Printf("Ошибка при обновлении пользователя: %v\n", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Ошибка при обновлении пользователя:", err)
+		fmt.Printf("Ошибка при обновлении пользователя: %v\n", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Println("Пользователь обновлён:", string(body))
+		fmt.Printf("Пользователь успешно обновлен: %s\n", body)
 	} else {
-		fmt.Println("Ошибка:", resp.Status)
+		fmt.Printf("Ошибка: %s\n", resp.Status)
 	}
 }
 
 func deleteUser() {
-	fmt.Print("Введите ID пользователя для удаления: ")
 	var id string
+	fmt.Print("Введите ID пользователя для удаления: ")
 	fmt.Scan(&id)
 
-	req, err := http.NewRequest("DELETE", baseURL+"/"+id, nil)
+	req, err := http.NewRequest("DELETE", apiBaseURL+"/"+id, nil)
 	if err != nil {
-		fmt.Println("Ошибка при удалении пользователя:", err)
+		fmt.Printf("Ошибка при удалении пользователя: %v\n", err)
 		return
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Ошибка при удалении пользователя:", err)
+		fmt.Printf("Ошибка при удалении пользователя: %v\n", err)
 		return
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNoContent {
-		fmt.Println("Пользователь удалён")
+	if resp.StatusCode == http.StatusOK {
+		fmt.Println("Пользователь успешно удален.")
 	} else {
-		fmt.Println("Ошибка:", resp.Status)
+		fmt.Printf("Ошибка: %s\n", resp.Status)
 	}
 }

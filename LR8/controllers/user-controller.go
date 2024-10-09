@@ -33,10 +33,9 @@ func InitUserController(collection *mongo.Database) {
 
 func ValidateInput(user User) bool {
 	if reflect.TypeOf(user.Name).String() == "string" ||
-		user.Name != "" ||
-		reflect.TypeOf(user.Age).String() == "int" ||
-		(user.Age > 0 && user.Age < 150) {
-
+	user.Name != "" ||
+	reflect.TypeOf(user.Age).String() == "int" || user.Age > 0 {
+		
 		return true
 	}
 	return false
@@ -45,12 +44,12 @@ func ValidateInput(user User) bool {
 func GetUsers(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
+	
 	pageStr := r.URL.Query().Get("page")
 	limitStr := r.URL.Query().Get("limit")
 	nameFilter := r.URL.Query().Get("name")
 	ageFilterStr := r.URL.Query().Get("age")
-
+	
 	page := 1
 	limit := 10
 	if pageStr != "" {
@@ -67,7 +66,7 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 			limit = 10
 		}
 	}
-
+	
 	filter := bson.M{}
 	if nameFilter != "" {
 		filter["name"] = bson.M{"$regex": nameFilter, "$options": "i"}
@@ -79,18 +78,18 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var skip int64 = int64((page - 1) * limit)
-
+	
 	users := []User{}
-
+	
 	opt := options.Find().SetSkip(skip).SetLimit(int64(limit))
 	cursor, err := userCollection.Find(ctx, filter, opt)
-
+	
 	if err != nil {
 		handlers.HandleError(w, err, http.StatusInternalServerError)
 		return
 	}
 	defer cursor.Close(ctx)
-
+	
 	for cursor.Next(ctx) {
 		var usr User
 		if err := cursor.Decode(&usr); err != nil {
@@ -99,7 +98,7 @@ func GetUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		users = append(users, usr)
 	}
-
+	
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(users)
 }
@@ -108,17 +107,28 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 	var usr User
 	vars := mux.Vars(r)
 	id := vars["id"]
-
+	
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		handlers.HandleError(w, fmt.Errorf("Неверный формат идентификатора"), http.StatusBadRequest)
+		return
+	}
+	
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	err := userCollection.FindOne(ctx, bson.M{"_id": id}).Decode(&usr)
+	
+	err = userCollection.FindOne(ctx, bson.M{"_id": objID}).Decode(&usr)
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			handlers.HandleError(w, fmt.Errorf("Пользователь не найден"), http.StatusNotFound)
+			return
+		}
 		handlers.HandleError(w, err, http.StatusInternalServerError)
 		return
 	}
-
+	
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(usr)
 }
 
@@ -137,7 +147,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !ValidateInput(usr) {
-		handlers.HandleError(w, fmt.Errorf("incorrect value"), http.StatusBadRequest)
+		handlers.HandleError(w, fmt.Errorf("Неверные данные пользователя"), http.StatusBadRequest)
 		return
 	}
 
@@ -151,14 +161,26 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(usr)
+
+	response := map[string]interface{}{
+		"message": "Пользователь успешно создан.",
+		"user":    usr,
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func UpdateUser(w http.ResponseWriter, r *http.Request) {
 	var usr User
 	vars := mux.Vars(r)
 	id := vars["id"]
+
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		handlers.HandleError(w, fmt.Errorf("Неверный формат идентификатора"), http.StatusBadRequest)
+		return
+	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -168,35 +190,61 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(body, &usr)
 	if err != nil || !ValidateInput(usr) {
-		handlers.HandleError(w, err, http.StatusBadRequest)
+		handlers.HandleError(w, fmt.Errorf("Неверные данные пользователя"), http.StatusBadRequest)
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err = userCollection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": usr})
+	update := bson.M{
+		"$set": bson.M{
+			"name": usr.Name,
+			"age":  usr.Age,
+		},
+	}
+
+	_, err = userCollection.UpdateOne(ctx, bson.M{"_id": objID}, update)
 	if err != nil {
 		handlers.HandleError(w, err, http.StatusInternalServerError)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(usr)
+
+	response := map[string]interface{}{
+		"message": "Пользователь успешно обновлен.",
+		"user":    usr,
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func DeleteUser(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	_, err := userCollection.DeleteOne(ctx, bson.M{"_id": id})
+	
+	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		handlers.HandleError(w, err, http.StatusInternalServerError)
+		handlers.HandleError(w, fmt.Errorf("Неверный формат идентификатора"), http.StatusBadRequest)
 		return
 	}
-
-	w.WriteHeader(http.StatusNoContent)
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	result, err := userCollection.DeleteOne(ctx, bson.M{"_id": objID})
+	if err != nil {
+		handlers.HandleError(w, fmt.Errorf("Ошибка при удалении пользователя"), http.StatusInternalServerError)
+		return
+	}
+	
+	if result.DeletedCount == 0 {
+		handlers.HandleError(w, fmt.Errorf("Пользователь не найден"), http.StatusNotFound)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Пользователь успешно удален"})
 }
