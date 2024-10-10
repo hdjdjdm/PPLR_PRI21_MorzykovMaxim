@@ -6,7 +6,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
 func DBConnect(uri string, base string) *mongo.Database {
 	clientOptions := options.Client().ApplyURI(uri)
 	client, err := mongo.Connect(context.TODO(), clientOptions)
@@ -21,11 +20,7 @@ func DBConnect(uri string, base string) *mongo.Database {
 
 	db := client.Database(base)
 	if db == nil {
-		panic("No collections was found")
+		panic("Коллекции не найдены")
 	}
 	return db
 }
-
-// uri:	"mongodb://localhost:27017/"
-// db: 	"sacred_base"
-// collection: "users"

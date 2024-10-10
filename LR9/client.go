@@ -30,6 +30,7 @@ func main() {
 		fmt.Println("================================")
 
 		var choice int
+		fmt.Print("Введите номер операции: ")
 		fmt.Scan(&choice)
 
 		switch choice {
@@ -74,52 +75,52 @@ func getAllUsers() {
 			fmt.Printf("ID: %s, Имя: %s, Возраст: %d\n", user.Id, user.Name, user.Age)
 		}
 	} else {
-		fmt.Printf("Ошибка: %s\n", resp.Status)
+		handleErrorResponse(resp)
 	}
 }
 
 func createUser() {
-	var user User
-	fmt.Print("Введите имя пользователя: ")
-	fmt.Scan(&user.Name)
-	fmt.Print("Введите возраст пользователя: ")
-	fmt.Scan(&user.Age)
+    var user User
+    fmt.Print("Введите имя пользователя: ")
+    fmt.Scan(&user.Name)
 
-	body, _ := json.Marshal(user)
-	resp, err := http.Post(apiBaseURL, "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		fmt.Printf("Ошибка при создании пользователя: %v\n", err)
-		return
-	}
-	defer resp.Body.Close()
+    for {
+        fmt.Print("Введите возраст пользователя: ")
+        _, err := fmt.Scan(&user.Age)
+        if err != nil {
+            fmt.Println("Ошибка: введите корректное целое число для возраста.")
+            fmt.Scanln()
+            continue
+        }
 
-	if resp.StatusCode == http.StatusCreated {
-		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Printf("Пользователь успешно создан: %s\n", body)
-	} else {
-		fmt.Printf("Ошибка: %s\n", resp.Status)
-	}
+        if user.Age <= 0 {
+            fmt.Println("Возраст должен быть положительным числом.")
+        } else {
+            break
+        }
+    }
+
+    body, _ := json.Marshal(user)
+    resp, err := http.Post(apiBaseURL, "application/json", bytes.NewBuffer(body))
+    if err != nil {
+        fmt.Printf("Ошибка при создании пользователя: %v\n", err)
+        return
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode == http.StatusCreated {
+        var result map[string]interface{}
+        body, _ := ioutil.ReadAll(resp.Body)
+        json.Unmarshal(body, &result)
+
+        createdUser := result["user"].(map[string]interface{})
+        fmt.Println("Пользователь успешно создан:")
+        fmt.Printf("ID: %s\nИмя: %s\nВозраст: %d\n", createdUser["id"], createdUser["name"], int(createdUser["age"].(float64)))
+    } else {
+        handleErrorResponse(resp)
+    }
 }
 
-func getUser() {
-	var id string
-	fmt.Print("Введите ID пользователя: ")
-	fmt.Scan(&id)
-
-	resp, err := http.Get(apiBaseURL + "/" + id)
-	if err != nil {
-		fmt.Printf("Ошибка при получении пользователя: %v\n", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Printf("Данные пользователя: %s\n", body)
-	} else {
-		fmt.Printf("Ошибка: %s\n", resp.Status)
-	}
-}
 
 func updateUser() {
 	var user User
@@ -147,10 +148,37 @@ func updateUser() {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
+		var result map[string]interface{}
 		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Printf("Пользователь успешно обновлен: %s\n", body)
+		json.Unmarshal(body, &result)
+
+		updatedUser := result["user"].(map[string]interface{})
+		fmt.Println("Пользователь успешно обновлен:")
+		fmt.Printf("ID: %s\nИмя: %s\nВозраст: %d\n", updatedUser["id"], updatedUser["name"], int(updatedUser["age"].(float64)))
 	} else {
-		fmt.Printf("Ошибка: %s\n", resp.Status)
+		handleErrorResponse(resp)
+	}
+}
+
+func getUser() {
+	var id string
+	fmt.Print("Введите ID пользователя: ")
+	fmt.Scan(&id)
+
+	resp, err := http.Get(apiBaseURL + "/" + id)
+	if err != nil {
+		fmt.Printf("Ошибка при получении пользователя: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		var user User
+		body, _ := ioutil.ReadAll(resp.Body)
+		json.Unmarshal(body, &user)
+		fmt.Printf("Данные пользователя: ID: %s, Имя: %s, Возраст: %d\n", user.Id, user.Name, user.Age)
+	} else {
+		handleErrorResponse(resp)
 	}
 }
 
@@ -176,6 +204,11 @@ func deleteUser() {
 	if resp.StatusCode == http.StatusOK {
 		fmt.Println("Пользователь успешно удален.")
 	} else {
-		fmt.Printf("Ошибка: %s\n", resp.Status)
+		handleErrorResponse(resp)
 	}
+}
+
+func handleErrorResponse(resp *http.Response) {
+	body, _ := ioutil.ReadAll(resp.Body)
+	fmt.Printf("Ошибка: %s. Подробности: %s\n", resp.Status, string(body))
 }
