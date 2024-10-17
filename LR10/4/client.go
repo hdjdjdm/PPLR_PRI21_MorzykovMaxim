@@ -10,27 +10,24 @@ import (
 )
 
 func main() {
-	// Загрузка сертификатов клиента
 	cert, err := tls.LoadX509KeyPair("client.crt", "client.key")
 	if err != nil {
 		fmt.Println("Ошибка при загрузке сертификата клиента:", err)
 		os.Exit(1)
 	}
 
-	// Чтение сертификата сервера
-	caCert, err := ioutil.ReadFile("server.crt")
+	caCert, err := ioutil.ReadFile("ca.crt")
 	if err != nil {
-		fmt.Println("Ошибка при чтении сертификата сервера:", err)
+		fmt.Println("Ошибка при чтении сертификата сервера (CA):", err)
 		os.Exit(1)
 	}
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(caCert)
 
-	// Настройки TLS для клиента
 	config := &tls.Config{
 		Certificates:       []tls.Certificate{cert},
 		RootCAs:            caCertPool,
-		InsecureSkipVerify: false, // Проверка сертификата сервера
+		InsecureSkipVerify: false,
 	}
 
 	conn, err := tls.Dial("tcp", "localhost:8080", config)

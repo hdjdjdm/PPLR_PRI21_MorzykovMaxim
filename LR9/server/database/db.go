@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"context"
@@ -25,7 +25,3 @@ func DBConnect(uri string, base string) *mongo.Database {
 	}
 	return db
 }
-
-// uri:	"mongodb://localhost:27017/"
-// db: 	"sacred_base"
-// collection: "users"

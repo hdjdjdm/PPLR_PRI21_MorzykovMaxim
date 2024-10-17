@@ -20,12 +20,12 @@ func main() {
 	// Загрузка сертификатов сервера
 	cert, err := tls.LoadX509KeyPair("server.crt", "server.key")
 	if err != nil {
-		fmt.Println("Ошибка при загрузке сертификата:", err)
+		fmt.Println("Ошибка при загрузке сертификата сервера:", err)
 		os.Exit(1)
 	}
 
-	// Настройка пула доверенных сертификатов для клиентов
-	caCert, err := ioutil.ReadFile("server.crt")
+	// Настройка пула доверенных сертификатов для клиентов (используем CA)
+	caCert, err := ioutil.ReadFile("ca.crt")
 	if err != nil {
 		fmt.Println("Ошибка при чтении CA сертификата:", err)
 		os.Exit(1)
