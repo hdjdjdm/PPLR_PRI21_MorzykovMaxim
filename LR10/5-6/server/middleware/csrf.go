@@ -2,23 +2,20 @@ package middleware
 
 import (
 	"net/http"
-
-	"github.com/gorilla/sessions"
+	"server/controllers"
 )
-
-var Store = sessions.NewCookieStore([]byte("your-secret-key"))
 
 func CSRFProtection(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			session, err := Store.Get(r, "session")
-			if err != nil {
-				http.Error(w, "сессия не найдена", http.StatusUnauthorized)
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
+			token := r.Header.Get("X-CSRF-Token")
+			if token == "" {
+				http.Error(w, "CSRF token missing", http.StatusForbidden)
 				return
 			}
-			csrfToken := session.Values["csrf_token"]
-			if csrfToken == nil || csrfToken != r.Header.Get("X-CSRF-Token") {
-				http.Error(w, "недействительный CSRF-токен", http.StatusForbidden)
+			err := controllers.ValidateCSRFToken(token, r)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusForbidden)
 				return
 			}
 		}

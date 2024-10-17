@@ -19,6 +19,7 @@ type User struct {
 }
 
 var sessionToken string
+var csrfToken string
 var wg sync.WaitGroup
 
 func main() {

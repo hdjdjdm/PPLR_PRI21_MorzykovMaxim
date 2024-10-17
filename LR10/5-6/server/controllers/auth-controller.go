@@ -67,7 +67,14 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	csrfToken, err := GenerateCSRFToken(claims.Login)
+	if err != nil {
+		http.Error(w, "Ошибка генерации CSRF токена", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-CSRF-Token", csrfToken)
 	json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
 }
 
